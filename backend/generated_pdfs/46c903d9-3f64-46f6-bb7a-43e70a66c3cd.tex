@@ -1,0 +1,69 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\begin{document}
+
+\section*{Solution to Question 30 (A)}
+
+\textbf{Question:}
+Two water taps together can fill a tank in $9\frac{3}{8}$ hours. The tap of larger diameter takes 10 hours less than the smaller one to fill the tank separately. Find the time in which each tap can separately fill the tank.
+
+\textbf{Step-by-step Solution:}
+
+\begin{enumerate}
+    \item \textbf{Define the variables:}
+    Let the time taken by the smaller tap to fill the tank be $x$ hours.
+    Then, the time taken by the larger tap to fill the tank is $(x - 10)$ hours.
+
+    \item \textbf{Determine the rate of filling for each tap:}
+    The part of the tank filled by the smaller tap in 1 hour = $\frac{1}{x}$.
+    The part of the tank filled by the larger tap in 1 hour = $\frac{1}{x - 10}$.
+
+    \item \textbf{Determine the combined rate:}
+    The total time taken by both taps together to fill the tank is $9\frac{3}{8}$ hours.
+    Converting this mixed fraction to an improper fraction:
+    \[ 9\frac{3}{8} = \frac{9 \times 8 + 3}{8} = \frac{75}{8} \text{ hours} \]
+    The part of the tank filled by both taps together in 1 hour = $\frac{1}{75/8} = \frac{8}{75}$.
+
+    \item \textbf{Set up the equation:}
+    According to the problem, the sum of the individual rates equals the combined rate:
+    \[ \frac{1}{x} + \frac{1}{x - 10} = \frac{8}{75} \]
+
+    \item \textbf{Solve the equation:}
+    Find a common denominator for the left side:
+    \[ \frac{(x - 10) + x}{x(x - 10)} = \frac{8}{75} \]
+    \[ \frac{2x - 10}{x^2 - 10x} = \frac{8}{75} \]
+    Cross-multiply to eliminate the fractions:
+    \[ 75(2x - 10) = 8(x^2 - 10x) \]
+    \[ 150x - 750 = 8x^2 - 80x \]
+    Rearrange the terms into a standard quadratic equation form ($ax^2 + bx + c = 0$):
+    \[ 8x^2 - 80x - 150x + 750 = 0 \]
+    \[ 8x^2 - 230x + 750 = 0 \]
+    Divide the entire equation by 2 to simplify:
+    \[ 4x^2 - 115x + 375 = 0 \]
+
+    \item \textbf{Solve the quadratic equation using the quadratic formula:}
+    The quadratic formula is $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$, where $a = 4$, $b = -115$, and $c = 375$.
+    First, calculate the discriminant ($D$):
+    \[ D = b^2 - 4ac = (-115)^2 - 4(4)(375) \]
+    \[ D = 13225 - 6000 = 7225 \]
+    Now, find the square root of the discriminant:
+    \[ \sqrt{D} = \sqrt{7225} = 85 \]
+    Substitute these values into the quadratic formula:
+    \[ x = \frac{115 \pm 85}{2 \times 4} \]
+    This gives two possible values for $x$:
+    \[ x_1 = \frac{115 + 85}{8} = \frac{200}{8} = 25 \]
+    \[ x_2 = \frac{115 - 85}{8} = \frac{30}{8} = 3.75 \]
+
+    \item \textbf{Evaluate the solutions:}
+    If $x = 3.75$, then the time taken by the larger tap would be $x - 10 = 3.75 - 10 = -6.25$ hours. Since time cannot be negative, $x = 3.75$ is not a valid solution.
+    Therefore, $x = 25$ is the correct value.
+
+    \item \textbf{Final Answer:}
+    Time taken by the smaller tap to fill the tank separately = \textbf{25 hours}.
+    Time taken by the larger tap to fill the tank separately = $25 - 10 = $ \textbf{15 hours}.
+\end{enumerate}
+
+\end{document}
