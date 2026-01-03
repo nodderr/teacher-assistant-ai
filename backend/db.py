@@ -1,6 +1,7 @@
 import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from datetime import datetime # Added datetime
 
 load_dotenv()
 
@@ -8,20 +9,8 @@ url: str = os.getenv("SUPABASE_URL")
 key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
-def upload_to_supabase(file_path, bucket_name, destination_path):
-    """Uploads a file from local disk to Supabase Storage"""
-    with open(file_path, 'rb') as f:
-        response = supabase.storage.from_(bucket_name).upload(
-            file=f,
-            path=destination_path,
-            file_options={"content-type": "application/pdf"}
-        )
-    # Get the public URL
-    project_url = os.getenv("SUPABASE_URL")
-    return f"{project_url}/storage/v1/object/public/{bucket_name}/{destination_path}"
-
 def upload_bytes_to_supabase(file_bytes, bucket_name, destination_path, content_type):
-    """Uploads in-memory bytes (like the image user just uploaded)"""
+    """Uploads in-memory bytes"""
     supabase.storage.from_(bucket_name).upload(
         file=file_bytes,
         path=destination_path,
@@ -31,10 +20,76 @@ def upload_bytes_to_supabase(file_bytes, bucket_name, destination_path, content_
     return f"{project_url}/storage/v1/object/public/{bucket_name}/{destination_path}"
 
 def save_record(name, original_url, solution_url):
-    """Saves the links to the database"""
-    data, count = supabase.table('solutions').insert({
+    response = supabase.table('solutions').insert({
         "name": name,
         "original_url": original_url,
-        "solution_url": solution_url
+        "solution_url": solution_url,
+        "created_at": datetime.now().isoformat() # Ensure date is set
     }).execute()
-    return data
+    if response.data and len(response.data) > 0:
+        return response.data[0]['id']
+    return None
+
+def get_records():
+    response = supabase.table('solutions').select("*").order("created_at", desc=True).execute()
+    return response.data
+
+def save_student_submission(paper_id, student_name, score, submission_url, report_url):
+    response = supabase.table('student_submissions').insert({
+        "paper_id": paper_id,
+        "student_name": student_name,
+        "score": score,
+        "submission_url": submission_url,
+        "report_url": report_url,
+        "created_at": datetime.now().isoformat() # FIX: Force current time
+    }).execute()
+    return response.data
+
+def get_student_submissions(paper_id):
+    response = supabase.table('student_submissions')\
+        .select("*")\
+        .eq('paper_id', paper_id)\
+        .order('created_at', desc=True)\
+        .execute()
+    return response.data
+
+def delete_from_storage(file_url):
+    if not file_url:
+        return
+    try:
+        bucket_name = "papers"
+        if f"/{bucket_name}/" in file_url:
+            path = file_url.split(f"/{bucket_name}/")[-1]
+            supabase.storage.from_(bucket_name).remove([path])
+    except Exception as e:
+        print(f"Error deleting file {file_url}: {e}")
+
+def delete_paper_record(paper_id):
+    data = supabase.table('solutions').select("*").eq('id', paper_id).execute()
+    if not data.data:
+        return
+
+    paper = data.data[0]
+    
+    students = supabase.table('student_submissions').select("*").eq('paper_id', paper_id).execute()
+    for student in students.data:
+        delete_from_storage(student.get('submission_url'))
+        delete_from_storage(student.get('report_url'))
+    
+    supabase.table('student_submissions').delete().eq('paper_id', paper_id).execute()
+
+    delete_from_storage(paper.get('original_url'))
+    delete_from_storage(paper.get('solution_url'))
+
+    supabase.table('solutions').delete().eq('id', paper_id).execute()
+
+def delete_student_record(student_id):
+    data = supabase.table('student_submissions').select("*").eq('id', student_id).execute()
+    if not data.data:
+        return
+    
+    student = data.data[0]
+    delete_from_storage(student.get('submission_url'))
+    delete_from_storage(student.get('report_url'))
+    
+    supabase.table('student_submissions').delete().eq('id', student_id).execute()
