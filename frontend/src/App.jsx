@@ -201,9 +201,9 @@ function App() {
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
             <GraduationCap className="text-blue-400" /> 
-            EduSolver AI
+            Neeti Verma
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Teacher's Assistant</p>
+          <p className="text-xs text-slate-400 mt-1">Teacher Assistant Portal</p>
         </div>
         
         <nav className="flex-1 p-4 space-y-2">

@@ -8,8 +8,8 @@ import time
 
 load_dotenv()
 
-Solver_Model="gemini-2.5-flash"
-Evaluation_Model="gemini-2.5-flash"
+Solver_Model="gemini-3-flash-preview"
+Evaluation_Model="gemini-2.5-flash-preview"
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -70,7 +70,7 @@ def get_latex_solution(image_inputs):
     full_solution_text = ""
     
     model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview", # 'flash' is faster and has a large context window
+        model_name=Evaluation_Model, # 'flash' is faster and has a large context window
         system_instruction=SOLVER_SYSTEM_PROMPT,
         generation_config=generation_config,
         safety_settings=safety_settings
@@ -118,7 +118,7 @@ def evaluate_student_solution(student_image_file, reference_solution_text):
     image = Image.open(io.BytesIO(image_bytes))
 
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name=Solver_Model,
         system_instruction=EVALUATOR_SYSTEM_PROMPT,
         generation_config=generation_config,
         safety_settings=safety_settings
