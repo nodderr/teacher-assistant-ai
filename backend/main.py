@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import io
+from typing import List
+import pypdfium2 as pdfium  # <--- NEW IMPORT
 from solver import get_latex_solution, evaluate_student_solution, extract_score
 from db import (
     upload_bytes_to_supabase, save_record, get_records, 
@@ -16,19 +18,51 @@ app.add_middleware(
 )
 
 @app.post("/solve")
-async def solve_paper(file: UploadFile = File(...), name: str = Form(...)):
-    print(f"Solving Paper: {name}")
+async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)):
+    print(f"Solving Paper: {name} with {len(files)} file(s)")
     job_id = str(uuid.uuid4())
-    file_bytes = await file.read()
     
-    try:
-        original_url = upload_bytes_to_supabase(
-            file_bytes, "papers", f"originals/{job_id}_{file.filename}", file.content_type
-        )
-    except Exception:
-        original_url = ""
+    processed_images = []
+    original_url = "" 
+    
+    for i, file in enumerate(files):
+        try:
+            file_bytes = await file.read()
+            
+            # Upload original file to Supabase
+            url = upload_bytes_to_supabase(
+                file_bytes, "papers", f"originals/{job_id}_{i}_{file.filename}", file.content_type
+            )
+            if i == 0: original_url = url
 
-    solution_text = get_latex_solution(io.BytesIO(file_bytes))
+            # --- CHANGED SECTION START ---
+            if file.content_type == "application/pdf":
+                try:
+                    # Load the PDF from bytes
+                    pdf = pdfium.PdfDocument(file_bytes)
+                    
+                    # Loop through pages and render them to images
+                    for page in pdf:
+                        # scale=2 gives higher resolution (good for handwriting)
+                        bitmap = page.render(scale=2) 
+                        pil_image = bitmap.to_pil()
+                        processed_images.append(pil_image)
+                        
+                except Exception as e:
+                    print(f"Error converting PDF {file.filename}: {e}")
+            # --- CHANGED SECTION END ---
+            
+            else:
+                # It's already an image
+                processed_images.append(io.BytesIO(file_bytes))
+                
+        except Exception as e:
+            print(f"Error processing file {file.filename}: {e}")
+
+    if not processed_images:
+        raise HTTPException(status_code=400, detail="No valid images or PDFs processed.")
+
+    solution_text = get_latex_solution(processed_images)
     
     try:
         solution_url = upload_bytes_to_supabase(
@@ -47,6 +81,7 @@ async def solve_paper(file: UploadFile = File(...), name: str = Form(...)):
         "solution_text": solution_text 
     }
 
+# ... (The rest of the file: /history, /evaluate, etc. stays EXACTLY the same)
 @app.get("/history")
 async def get_history_route():
     return get_records()

@@ -4,11 +4,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import html2pdf from 'html2pdf.js';
 import 'katex/dist/katex.min.css';
 import { 
   Upload, FileText, Loader2, AlertCircle, History, 
   LayoutDashboard, GraduationCap, ChevronRight, CheckCircle2,
-  ExternalLink, Users, FileSignature, Trash2
+  ExternalLink, Users, FileSignature, Trash2, Download
 } from 'lucide-react';
 
 function App() {
@@ -16,7 +17,7 @@ function App() {
   
   // -- STATE: Solver --
   const [currentPaperId, setCurrentPaperId] = useState(null); 
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]); // Changed to array
   const [paperName, setPaperName] = useState("");
   const [solution, setSolution] = useState("");
   const [isSolving, setIsSolving] = useState(false);
@@ -44,8 +45,8 @@ function App() {
   // --- API CALLS ---
 
   const handleSolve = async () => {
-    if (!file || !paperName) {
-      setError("Please provide both a file and a name.");
+    if (files.length === 0 || !paperName) {
+      setError("Please provide at least one file and a paper name.");
       return;
     }
     setIsSolving(true);
@@ -56,7 +57,10 @@ function App() {
     setCurrentPaperId(null);
 
     const formData = new FormData();
-    formData.append('file', file);
+    // Append all selected files to formData
+    Array.from(files).forEach((file) => {
+        formData.append('files', file);
+    });
     formData.append('name', paperName);
 
     try {
@@ -65,11 +69,23 @@ function App() {
       setCurrentPaperId(response.data.paper_id);
       setDashboardView('solution');
     } catch (err) {
-      setError("Failed to solve paper.");
+      setError("Failed to solve paper. Please check the backend connection.");
       console.error(err);
     } finally {
       setIsSolving(false);
     }
+  };
+
+  const handleDownloadPDF = () => {
+    const element = document.getElementById('solution-content');
+    const opt = {
+      margin:       [0.5, 0.5, 0.5, 0.5],
+      filename:     `${paperName || 'solution'}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
   };
 
   const fetchHistory = async () => {
@@ -103,15 +119,12 @@ function App() {
 
   // --- DELETE FUNCTIONS ---
   const handleDeletePaper = async (e, id) => {
-    e.stopPropagation(); // Prevent loading the paper when clicking delete
+    e.stopPropagation(); 
     if(!confirm("Are you sure? This will delete the paper and all student submissions.")) return;
     
     try {
         await axios.delete(`http://127.0.0.1:8000/history/${id}`);
-        // Remove from UI immediately
         setHistoryItems(prev => prev.filter(item => item.id !== id));
-        
-        // If the deleted paper is currently active, clear the dashboard
         if (currentPaperId === id) {
             setSolution("");
             setPaperName("");
@@ -253,22 +266,25 @@ function App() {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Question Paper</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Question Paper (PDF or Images)</label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
                       <input 
                         type="file" 
-                        accept="image/*"
+                        multiple // Allow multiple files
+                        accept="image/*,application/pdf" // Allow PDF and Image
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        onChange={(e) => setFile(e.target.files[0])}
+                        onChange={(e) => setFiles(e.target.files)} // Store FileList
                       />
                       <Upload className="mx-auto text-gray-400 mb-2" size={24} />
-                      <p className="text-xs text-gray-500">{file ? file.name : "Upload Image"}</p>
+                      <p className="text-xs text-gray-500">
+                        {files.length > 0 ? `${files.length} file(s) selected` : "Upload Images or PDF"}
+                      </p>
                     </div>
                   </div>
 
                   <button 
                     onClick={handleSolve}
-                    disabled={isSolving || !file}
+                    disabled={isSolving || files.length === 0}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                   >
                     {isSolving ? <Loader2 className="animate-spin" size={16} /> : "Generate Solution"}
@@ -346,7 +362,6 @@ function App() {
 
                       {evalReport && (
                         <div className="mt-6 pt-6 border-t border-gray-100">
-                          {/* FIX: Added Math Plugins here */}
                           <div className="prose prose-sm max-w-none prose-headings:text-indigo-900 prose-table:border prose-th:bg-gray-50">
                             <ReactMarkdown 
                               remarkPlugins={[remarkGfm, remarkMath]} 
@@ -363,18 +378,32 @@ function App() {
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 min-h-[500px]">
                     {solution ? (
                       <div className="p-8">
+                        {/* Header with Download Button */}
                         <div className="flex items-center justify-between border-b pb-4 mb-6">
                           <h1 className="text-2xl font-bold text-gray-900">{paperName}</h1>
-                          <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase tracking-wide">Solved</span>
+                          <div className="flex gap-2">
+                             <button 
+                                onClick={handleDownloadPDF}
+                                className="flex items-center gap-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm font-medium transition-colors"
+                             >
+                                <Download size={16} /> Save PDF
+                             </button>
+                             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold uppercase tracking-wide">Solved</span>
+                          </div>
                         </div>
-                        <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-headings:font-bold prose-a:text-blue-600 prose-pre:bg-slate-900 prose-pre:text-slate-50">
-                          <ReactMarkdown 
-                            remarkPlugins={[remarkMath, remarkGfm]} 
-                            rehypePlugins={[rehypeKatex]}
-                          >
-                            {solution}
-                          </ReactMarkdown>
+                        
+                        {/* Content Wrapper for PDF Generation */}
+                        <div id="solution-content">
+                            <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-headings:font-bold prose-a:text-blue-600 prose-pre:bg-slate-900 prose-pre:text-slate-50">
+                            <ReactMarkdown 
+                                remarkPlugins={[remarkMath, remarkGfm]} 
+                                rehypePlugins={[rehypeKatex]}
+                            >
+                                {solution}
+                            </ReactMarkdown>
+                            </div>
                         </div>
+
                       </div>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center text-gray-400 p-12">

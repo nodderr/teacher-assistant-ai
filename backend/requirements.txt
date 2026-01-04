@@ -4,3 +4,5 @@ uvicorn
 openai
 python-dotenv
 httpx
+pypdfium2
+pillow
