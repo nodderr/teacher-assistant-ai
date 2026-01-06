@@ -10,7 +10,7 @@ load_dotenv()
 
 Solver_Model="gemini-3-flash-preview"
 Evaluation_Model="gemini-2.5-flash-preview"
-Generator_Model="gemini-2.5-flash"
+Generator_Model="gemini-3-flash-preview"
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 

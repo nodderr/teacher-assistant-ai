@@ -4,7 +4,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import html2pdf from 'html2pdf.js';
 import { 
   Upload, FileText, Loader2, CheckCircle2,
   Users, FileSignature, Trash2, Download,
@@ -39,31 +38,116 @@ export default function Dashboard({
       setIsEditingSolution(false);
   };
 
+  // --- ROBUST PRINT FUNCTION ---
   const handleDownloadPDF = () => {
     const element = document.getElementById('solution-content');
     if (!element) return;
-    const clone = element.cloneNode(true);
-    const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.top = '-9999px';
-    container.style.left = '-9999px';
-    container.style.width = '1000px'; 
-    container.style.background = 'white'; 
-    container.style.zIndex = '-1';
-    clone.style.width = '100%';
-    clone.style.height = 'auto';
-    clone.style.overflow = 'visible';
-    clone.style.maxHeight = 'none';
-    container.appendChild(clone);
-    document.body.appendChild(container);
-    const opt = {
-      margin: [0.5, 0.5, 0.5, 0.5],
-      filename: `${paperName || 'solution'}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 1000 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    html2pdf().set(opt).from(clone).save().then(() => document.body.removeChild(container));
+
+    const printWindow = window.open('', '_blank', 'height=800,width=800,scrollbars=yes');
+    
+    // 1. Process Styles: Convert relative links to absolute to ensure they load in the new window
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map(node => {
+            if (node.tagName === 'LINK' && node.getAttribute('href')) {
+                const href = node.getAttribute('href');
+                if (href.startsWith('/')) {
+                    // Convert relative path to absolute URL
+                    return `<link rel="stylesheet" href="${window.location.origin}${href}">`;
+                }
+            }
+            return node.outerHTML;
+        })
+        .join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${paperName || 'Solution Key'}</title>
+          ${styles} 
+          <style>
+            /* 2. CRITICAL PRINT RESET */
+            @media print {
+                /* Reset html/body to allow full scrolling/printing */
+                html, body {
+                    height: auto !important;
+                    min-height: 100% !important;
+                    overflow: visible !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+                
+                /* Define page margins */
+                @page {
+                    margin: 20mm;
+                    size: auto;
+                }
+
+                /* Ensure the container expands fully */
+                #print-root {
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    overflow: visible !important;
+                    display: block !important;
+                }
+
+                /* Force Text Color to Black (Fixes fading) */
+                * {
+                    color: #000 !important;
+                    box-shadow: none !important;
+                    text-shadow: none !important;
+                }
+
+                /* Page Break Rules */
+                h1, h2, h3, h4, h5, h6 { 
+                    break-after: avoid; 
+                    page-break-after: avoid; 
+                }
+                img, table, pre, blockquote { 
+                    break-inside: avoid; 
+                    page-break-inside: avoid; 
+                }
+                
+                /* Fix Prose width constraints */
+                .prose { 
+                    max-width: none !important; 
+                    width: 100% !important; 
+                }
+                
+                /* Hide any non-printable UI elements that might sneak in */
+                button, input, ::-webkit-scrollbar { 
+                    display: none !important; 
+                }
+            }
+            
+            /* Screen styles for the pop-up */
+            body {
+                background: white;
+                padding: 40px;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="print-root" class="prose prose-slate max-w-none">
+            ${element.innerHTML}
+          </div>
+          <script>
+            // 3. Wait for resources to load before printing
+            window.onload = function() {
+              setTimeout(() => {
+                window.focus(); // Required for some browsers
+                window.print();
+                // Optional: window.close(); // Commented out so you can debug if needed
+              }, 800); // Increased delay slightly to ensure fonts/math render
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
   };
 
   const analyticsData = useMemo(() => {
@@ -157,7 +241,7 @@ export default function Dashboard({
                                 {!isEditingSolution ? (
                                     <>
                                     <button onClick={startEditing} className="flex items-center gap-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm font-medium"><Edit2 size={16} /> Edit Key</button>
-                                    <button onClick={handleDownloadPDF} className="flex items-center gap-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm font-medium"><Download size={16} /> PDF</button>
+                                    <button onClick={handleDownloadPDF} className="flex items-center gap-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm font-medium"><Download size={16} /> Print/PDF</button>
                                     </>
                                 ) : (
                                     <>
