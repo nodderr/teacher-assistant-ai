@@ -9,7 +9,7 @@ import time
 load_dotenv()
 
 Solver_Model="gemini-3-flash-preview"
-Evaluation_Model="gemini-2.5-flash-preview"
+Evaluation_Model="gemini-2.5-flash"
 Generator_Model="gemini-3-flash-preview"
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -65,13 +65,17 @@ Output Format (Markdown):
 
 # --- BOARD SPECIFIC PROMPTS ---
 
+#
+
 # FIXED: Doubled curly braces {{ }} for LaTeX examples so .format() ignores them
 LATEX_RULES = r"""
 CRITICAL LATEX RULES:
-1. **SQUARE ROOTS:** NEVER enclose the entire equation inside `\sqrt{{}}`. 
-   - **WRONG:** `\sqrt{{x^2 + 5 = 9}}` (Root extends over equals sign)
-   - **CORRECT:** `\sqrt{{x^2 + 5}} = 9` (Root only over the term)
-2. **FRACTIONS:** Ensure fractions are closed properly. `\frac{{a}}{{b}}`.
+1. **DELIMITERS:** Enclose ALL math expressions in `$` (inline) or `$$` (block).
+   - Example: "The value is $\sqrt{{25}}$."
+2. **SQUARE ROOTS:** - **WRONG:** $\sqrt{{x + y = z}}$
+   - **CORRECT:** $\sqrt{{x + y}} = z$
+3. **NO UNICODE:** Use $\sqrt{{...}}$, not √. Use $\times$, not x.
+4. **FRACTIONS:** Use $\frac{{a}}{{b}}$.
 """
 
 PROMPT_CBSE = r"""
@@ -185,7 +189,7 @@ def get_latex_solution(image_inputs):
     """Solves the paper PAGE BY PAGE."""
     full_solution_text = ""
     model = genai.GenerativeModel(
-        model_name=Evaluation_Model, 
+        model_name=Solver_Model, 
         system_instruction=SOLVER_SYSTEM_PROMPT,
         generation_config=generation_config,
         safety_settings=safety_settings
@@ -218,7 +222,7 @@ def evaluate_student_solution(student_image_file, reference_solution_text):
     image = Image.open(io.BytesIO(image_bytes))
 
     model = genai.GenerativeModel(
-        model_name=Solver_Model,
+        model_name=Evaluation_Model,
         system_instruction=EVALUATOR_SYSTEM_PROMPT,
         generation_config=generation_config,
         safety_settings=safety_settings
