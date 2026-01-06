@@ -3,17 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import io
 from typing import List, Optional
+from datetime import datetime
 import pypdfium2 as pdfium 
 from solver import (
     get_latex_solution, evaluate_student_solution, extract_score, 
-    generate_cbse_paper # Imported new function
+    generate_cbse_paper
 )
 from db import (
     upload_bytes_to_supabase, save_record, get_records, 
     save_student_submission, get_student_submissions,
     delete_paper_record, delete_student_record,
     update_paper_solution, update_student_submission,
-    save_generated_paper_record # Imported new function
+    save_generated_paper, get_generated_papers, delete_generated_paper # New imports
 )
 from pydantic import BaseModel
 
@@ -32,9 +33,10 @@ class GradeUpdate(BaseModel):
     report: str
 
 class GenerateRequest(BaseModel):
+    name: str  # Added Name
     class_level: str
     subject: str
-    paper_type: str # 'complete' or 'chapterwise'
+    paper_type: str 
     chapters: List[str]
     difficulty: int
 
@@ -49,8 +51,6 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
     for i, file in enumerate(files):
         try:
             file_bytes = await file.read()
-            
-            # Upload original file to Supabase
             url = upload_bytes_to_supabase(
                 file_bytes, "papers", f"originals/{job_id}_{i}_{file.filename}", file.content_type
             )
@@ -66,8 +66,7 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
                 except Exception as e:
                     print(f"Error converting PDF {file.filename}: {e}")
             else:
-                processed_images.append(io.BytesIO(file_bytes))
-                
+                processed_images.append(io.BytesIO(file_bytes))     
         except Exception as e:
             print(f"Error processing file {file.filename}: {e}")
 
@@ -95,17 +94,24 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
 
 @app.post("/generate-paper")
 async def generate_paper_route(req: GenerateRequest):
-    print(f"Generating {req.subject} paper for {req.class_level}")
+    print(f"Generating {req.subject} paper: {req.name}")
     
     try:
-        # Generate content
         paper_text = generate_cbse_paper(
             req.class_level, req.subject, req.chapters, req.difficulty
         )
         
-        # Save to DB
-        paper_name = f"{req.subject} {req.paper_type.capitalize()} Paper ({req.class_level})"
-        paper_id, file_url = save_generated_paper_record(paper_name, paper_text)
+        # Save file to storage
+        filename = f"generated/{datetime.now().strftime('%Y%m%d%H%M%S')}_{req.name.replace(' ', '_')}.md"
+        file_url = upload_bytes_to_supabase(
+            paper_text.encode('utf-8'), 
+            "papers", 
+            filename, 
+            "text/markdown"
+        )
+        
+        # Save to NEW table
+        paper_id = save_generated_paper(req.name, req.class_level, req.subject, file_url)
         
         return {
             "status": "success",
@@ -116,6 +122,19 @@ async def generate_paper_route(req: GenerateRequest):
     except Exception as e:
         print(f"Generation Route Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/generated-papers")
+async def get_generated_papers_route():
+    return get_generated_papers()
+
+@app.delete("/generated-papers/{paper_id}")
+async def delete_generated_paper_route(paper_id: str):
+    try:
+        delete_generated_paper(paper_id)
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Delete Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete generated paper")
 
 @app.put("/paper/{paper_id}/solution")
 async def update_solution_route(paper_id: str, update: SolutionUpdate):

@@ -19,6 +19,7 @@ def upload_bytes_to_supabase(file_bytes, bucket_name, destination_path, content_
     project_url = os.getenv("SUPABASE_URL")
     return f"{project_url}/storage/v1/object/public/{bucket_name}/{destination_path}"
 
+# --- SOLVED PAPERS (HISTORY) ---
 def save_record(name, original_url, solution_url):
     response = supabase.table('solutions').insert({
         "name": name,
@@ -29,30 +30,6 @@ def save_record(name, original_url, solution_url):
     if response.data and len(response.data) > 0:
         return response.data[0]['id']
     return None
-
-def save_generated_paper_record(name, question_paper_text):
-    """Saves a generated paper text as a file and creates a DB record"""
-    # 1. Upload the text as a Markdown file
-    filename = f"generated/{datetime.now().strftime('%Y%m%d%H%M%S')}_{name.replace(' ', '_')}.md"
-    url = upload_bytes_to_supabase(
-        question_paper_text.encode('utf-8'), 
-        "papers", 
-        filename, 
-        "text/markdown"
-    )
-    
-    # 2. Insert into DB (using original_url to store the Question Paper link)
-    # We leave solution_url empty as it's just a question paper for now.
-    response = supabase.table('solutions').insert({
-        "name": name,
-        "original_url": url, 
-        "solution_url": None, # Unsolved
-        "created_at": datetime.now().isoformat()
-    }).execute()
-    
-    if response.data and len(response.data) > 0:
-        return response.data[0]['id'], url
-    return None, url
 
 def update_paper_solution(paper_id, new_solution_text):
     data = supabase.table('solutions').select("solution_url").eq('id', paper_id).execute()
@@ -73,6 +50,34 @@ def get_records():
     response = supabase.table('solutions').select("*").order("created_at", desc=True).execute()
     return response.data
 
+# --- GENERATED PAPERS (NEW FEATURE) ---
+def save_generated_paper(name, class_level, subject, file_url):
+    """Saves a record to the generated_papers table"""
+    response = supabase.table('generated_papers').insert({
+        "name": name,
+        "class_level": class_level,
+        "subject": subject,
+        "file_url": file_url,
+        "created_at": datetime.now().isoformat()
+    }).execute()
+    if response.data and len(response.data) > 0:
+        return response.data[0]['id']
+    return None
+
+def get_generated_papers():
+    response = supabase.table('generated_papers').select("*").order("created_at", desc=True).execute()
+    return response.data
+
+def delete_generated_paper(paper_id):
+    # 1. Get file URL to delete from storage
+    data = supabase.table('generated_papers').select("file_url").eq('id', paper_id).execute()
+    if data.data:
+        delete_from_storage(data.data[0]['file_url'])
+    
+    # 2. Delete record
+    supabase.table('generated_papers').delete().eq('id', paper_id).execute()
+
+# --- STUDENT SUBMISSIONS ---
 def save_student_submission(paper_id, student_name, score, submission_url, report_url):
     response = supabase.table('student_submissions').insert({
         "paper_id": paper_id,
@@ -107,6 +112,7 @@ def get_student_submissions(paper_id):
         .execute()
     return response.data
 
+# --- UTILS ---
 def delete_from_storage(file_url):
     if not file_url: return
     try:
