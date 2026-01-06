@@ -1,13 +1,15 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 import uuid
 import io
+import json
 from typing import List, Optional
 from datetime import datetime
 import pypdfium2 as pdfium 
 from solver import (
-    get_latex_solution, evaluate_student_solution, extract_score, 
-    generate_paper # Renamed from generate_cbse_paper
+    get_latex_solution_stream, evaluate_student_solution, extract_score, 
+    generate_paper
 )
 from db import (
     upload_bytes_to_supabase, save_record, get_records, 
@@ -36,7 +38,7 @@ class GenerateRequest(BaseModel):
     name: str 
     class_level: str
     subject: str
-    board: str # Added Board
+    board: str
     paper_type: str 
     chapters: List[str]
     difficulty: int
@@ -46,11 +48,12 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
     print(f"Solving Paper: {name} with {len(files)} file(s)")
     job_id = str(uuid.uuid4())
     
+    # 1. Pre-process all files into images
     processed_images = []
     original_url = "" 
     
-    for i, file in enumerate(files):
-        try:
+    try:
+        for i, file in enumerate(files):
             file_bytes = await file.read()
             url = upload_bytes_to_supabase(
                 file_bytes, "papers", f"originals/{job_id}_{i}_{file.filename}", file.content_type
@@ -67,31 +70,49 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
                 except Exception as e:
                     print(f"Error converting PDF {file.filename}: {e}")
             else:
-                processed_images.append(io.BytesIO(file_bytes))     
-        except Exception as e:
-            print(f"Error processing file {file.filename}: {e}")
+                processed_images.append(io.BytesIO(file_bytes))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"File processing error: {e}")
 
     if not processed_images:
         raise HTTPException(status_code=400, detail="No valid images or PDFs processed.")
 
-    solution_text = get_latex_solution(processed_images)
-    
-    try:
-        solution_url = upload_bytes_to_supabase(
-            solution_text.encode('utf-8'), "papers", f"solutions/{job_id}.md", "text/markdown"
-        )
-    except Exception:
+    # 2. Generator for Streaming Response
+    async def solve_generator():
+        solution_text = ""
+        
+        # Stream updates from the solver
+        for current_page, total_pages, current_text in get_latex_solution_stream(processed_images):
+            solution_text = current_text
+            # Yield progress JSON
+            yield json.dumps({
+                "status": "solving_page",
+                "current": current_page,
+                "total": total_pages
+            }) + "\n"
+
+        # Finalize
         solution_url = ""
+        try:
+            solution_url = upload_bytes_to_supabase(
+                solution_text.encode('utf-8'), "papers", f"solutions/{job_id}.md", "text/markdown"
+            )
+        except Exception:
+            pass
 
-    paper_id = save_record(name, original_url, solution_url)
+        paper_id = save_record(name, original_url, solution_url)
 
-    return {
-        "status": "success",
-        "paper_id": paper_id,
-        "original_url": original_url,
-        "solution_url": solution_url,
-        "solution_text": solution_text 
-    }
+        # Yield final result
+        yield json.dumps({
+            "status": "completed",
+            "paper_id": paper_id,
+            "original_url": original_url,
+            "solution_url": solution_url,
+            "solution_text": solution_text
+        }) + "\n"
+
+    return StreamingResponse(solve_generator(), media_type="application/x-ndjson")
+
 
 @app.post("/generate-paper")
 async def generate_paper_route(req: GenerateRequest):
@@ -172,6 +193,24 @@ async def evaluate_paper(
     job_id = str(uuid.uuid4())
     
     file_bytes = await student_file.read()
+    
+    # --- ADDED: Process PDF for evaluation ---
+    processed_images = []
+    
+    if student_file.content_type == "application/pdf":
+        try:
+            pdf = pdfium.PdfDocument(file_bytes)
+            for page in pdf:
+                bitmap = page.render(scale=2) 
+                pil_image = bitmap.to_pil()
+                processed_images.append(pil_image)
+        except Exception as e:
+            print(f"Error converting Student PDF: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid PDF: {e}")
+    else:
+        # It's an image
+        processed_images.append(io.BytesIO(file_bytes))
+
     try:
         submission_url = upload_bytes_to_supabase(
             file_bytes, "papers", f"students/{job_id}_{student_file.filename}", student_file.content_type
@@ -179,7 +218,8 @@ async def evaluate_paper(
     except Exception:
         submission_url = ""
 
-    report_text = evaluate_student_solution(io.BytesIO(file_bytes), reference_solution)
+    # Pass list of images to solver
+    report_text = evaluate_student_solution(processed_images, reference_solution)
     score = extract_score(report_text)
 
     try:

@@ -8,8 +8,8 @@ import time
 
 load_dotenv()
 
-Solver_Model="gemini-3-flash-preview"
-Evaluation_Model="gemini-2.5-flash"
+Solver_Model="gemini-3-flash-preview" # Updated to latest stable or preview if preferred
+Evaluation_Model="gemini-3-flash-preview"
 Generator_Model="gemini-3-flash-preview"
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -48,7 +48,7 @@ EVALUATOR_SYSTEM_PROMPT = r"""
 You are an expert grader.
 Inputs:
 1. A "Reference Solution" (text).
-2. A "Student Submission" (image).
+2. A "Student Submission" (images).
 
 Task:
 1. Map the student's answers to the Reference Solution.
@@ -63,11 +63,7 @@ Output Format (Markdown):
 **Total Score:** X / Y
 """
 
-# --- BOARD SPECIFIC PROMPTS ---
-
-#
-
-# FIXED: Doubled curly braces {{ }} for LaTeX examples so .format() ignores them
+# ... [KEEP EXISTING LATEX_RULES, PROMPT_CBSE, PROMPT_ICSE, PROMPT_IB DEFINITIONS] ...
 LATEX_RULES = r"""
 CRITICAL LATEX RULES:
 1. **DELIMITERS:** Enclose ALL math expressions in `$` (inline) or `$$` (block).
@@ -81,10 +77,9 @@ CRITICAL LATEX RULES:
 PROMPT_CBSE = r"""
 You are a CBSE Examination Paper Setter.
 FORMATTING RULES (Markdown + HTML):
-
 1. **HEADER (Use Markdown headers inside center tags):**
    <center>
-   <h1>Neeti Tution Classes</h1>
+   <h1>Neeti Tuition Classes</h1>
    <h3>PRE-BOARD EXAMINATION (2025-2026)</h3>
    <b>CLASS: {class_level}</b> | <b>SUBJECT: {subject}</b> | <b>BOARD: CBSE</b>
    </center>
@@ -94,7 +89,6 @@ FORMATTING RULES (Markdown + HTML):
    <b>Maximum Marks: 80</b>
    </div>
    <hr>
-
 2. **GENERAL INSTRUCTIONS:**
    **General Instructions:**
    1. This Question Paper contains 38 questions.
@@ -105,13 +99,11 @@ FORMATTING RULES (Markdown + HTML):
    6. **Section D:** LA (5 marks each).
    7. **Section E:** Case Study (4 marks each).
    8. Use $\pi=22/7$ wherever required.
-
 3. **SECTION HEADERS (Use HTML centering):**
    <br><br><br>
    <center><h2>SECTION A</h2></center>
    <center>*(Section A consists of 20 questions of 1 mark each)*</center>
    <br>
-
 4. **QUESTION FORMATTING:** - **Numbering:** Use bold numbers like **1.**, **2.** (Continuous 1 to 38).
    - **Spacing:** Leave TWO blank lines between questions.
 """ + LATEX_RULES
@@ -119,7 +111,6 @@ FORMATTING RULES (Markdown + HTML):
 PROMPT_ICSE = r"""
 You are an ICSE Examination Paper Setter.
 FORMATTING RULES (Markdown + HTML):
-
 1. **HEADER (Use Markdown headers inside center tags):**
    <center>
    <h1>Neeti Tution Classes</h1>
@@ -132,7 +123,6 @@ FORMATTING RULES (Markdown + HTML):
    <b>Maximum Marks: 80</b>
    </div>
    <hr>
-
 2. **GENERAL INSTRUCTIONS:**
    **General Instructions:**
    1. Answers to this Paper must be written on the paper provided separately.
@@ -140,13 +130,11 @@ FORMATTING RULES (Markdown + HTML):
    3. This paper consists of two sections: Section A and Section B.
    4. **Section A** (Compulsory) consists of short answer questions.
    5. **Section B** consists of long answer questions. Answer any FOUR questions.
-
 3. **SECTION HEADERS (Use HTML centering):**
    <br><br><br>
    <center><h2>SECTION A (40 Marks)</h2></center>
    <center>*(Attempt all questions from this Section)*</center>
    <br>
-
 4. **QUESTION FORMATTING:**
    - **Numbering:** Use **Q1.**, **Q2.** style headers. 
    - **Sub-parts:** Use (i), (ii), (iii).
@@ -155,7 +143,6 @@ FORMATTING RULES (Markdown + HTML):
 PROMPT_IB = r"""
 You are an IB DP (International Baccalaureate) Paper Setter.
 FORMATTING RULES (Markdown + HTML):
-
 1. **HEADER (Use Markdown headers inside center tags):**
    <center>
    <h1>Neeti Tution Classes</h1>
@@ -168,25 +155,25 @@ FORMATTING RULES (Markdown + HTML):
    <b>Maximum Marks: 80</b>
    </div>
    <hr>
-
 2. **GENERAL INSTRUCTIONS:**
    **Instructions to Candidates:**
    1. Do not open this examination paper until instructed to do so.
    2. Answer all questions.
    3. Unless otherwise stated in the question, all numerical answers should be given exactly or to three significant figures.
-
 3. **SECTION HEADERS:**
    <br><br><br>
    <center><h2>SECTION A</h2></center>
    <br>
-
 4. **QUESTION FORMATTING:**
    - Number questions 1, 2, 3... 
    - Marks should be indicated in brackets at the end of the line, e.g. **[4 marks]**.
 """ + LATEX_RULES
 
-def get_latex_solution(image_inputs):
-    """Solves the paper PAGE BY PAGE."""
+def get_latex_solution_stream(image_inputs):
+    """
+    Solves the paper PAGE BY PAGE and YIELDS progress.
+    Yields: (current_page_index, total_pages, accumulated_text)
+    """
     full_solution_text = ""
     model = genai.GenerativeModel(
         model_name=Solver_Model, 
@@ -194,7 +181,10 @@ def get_latex_solution(image_inputs):
         generation_config=generation_config,
         safety_settings=safety_settings
     )
-    print(f"Processing {len(image_inputs)} pages...")
+    
+    total_pages = len(image_inputs)
+    print(f"Processing {total_pages} pages...")
+    
     for i, item in enumerate(image_inputs):
         try:
             img = None
@@ -203,39 +193,51 @@ def get_latex_solution(image_inputs):
                 img = Image.open(item)
             else:
                 img = item 
+            
             print(f"Solving Page {i+1}...")
+            # Yield progress before starting the heavy generation
+            # We yield the previous text + a marker or just the state
+            
             response = model.generate_content([
                 f"Solve all questions present on Page {i+1} of this exam paper.", 
                 img
             ])
             page_content = response.text if response.text else "*[No text generated for this page]*"
+            
             full_solution_text += f"\n\n## --- Page {i+1} Solution ---\n\n{page_content}"
-            time.sleep(1)
+            
+            # Yield progress update
+            yield (i + 1, total_pages, full_solution_text)
+            
+            time.sleep(1) # Avoid rate limits
         except Exception as e:
             print(f"Error on Page {i+1}: {e}")
             full_solution_text += f"\n\n## --- Page {i+1} Error ---\nCould not solve this page. Error: {str(e)}\n"
-    return full_solution_text
+            yield (i + 1, total_pages, full_solution_text)
 
-def evaluate_student_solution(student_image_file, reference_solution_text):
-    student_image_file.seek(0)
-    image_bytes = student_image_file.read()
-    image = Image.open(io.BytesIO(image_bytes))
+    # Return is not possible in generator, the last yield contains the full text
 
+def evaluate_student_solution(student_images, reference_solution_text):
+    """
+    Evaluates student submission which can be multiple images.
+    """
     model = genai.GenerativeModel(
         model_name=Evaluation_Model,
         system_instruction=EVALUATOR_SYSTEM_PROMPT,
         generation_config=generation_config,
         safety_settings=safety_settings
     )
+    
+    # Prepare content list: Prompt string followed by all images
+    content = [f"Reference Solution:\n{reference_solution_text}\n\nEvaluate the following student submission pages."]
+    content.extend(student_images)
+    
     try:
-        response = model.generate_content([
-            f"Reference Solution:\n{reference_solution_text}\n\nEvaluate the student submission.", 
-            image
-        ])
+        response = model.generate_content(content)
         return response.text
     except Exception as e:
         print(f"Evaluation Error: {e}")
-        return "Error: Could not generate evaluation report."
+        return f"Error: Could not generate evaluation report. Details: {str(e)}"
 
 def extract_score(text):
     match = re.search(r"(?:Total\s*)?Score\s*[:\-]?\s*(\d+\s*[\/\\]\s*\d+)", text, re.IGNORECASE)
@@ -259,8 +261,6 @@ def generate_paper(class_level, subject, chapters, difficulty, board):
     else:
         base_prompt = PROMPT_CBSE  # Default to CBSE
     
-    # Format the system prompt
-    # Now safe to format because LaTeX braces are escaped as {{ }}
     sys_prompt = base_prompt.format(
         class_level=class_level, 
         subject=subject

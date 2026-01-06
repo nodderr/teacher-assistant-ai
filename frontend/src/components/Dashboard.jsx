@@ -15,7 +15,18 @@ import {
 } from 'recharts';
 
 export default function Dashboard({
-    paperName, setPaperName, files, setFiles, handleSolve, isSolving,
+    paperName, setPaperName, files, setFiles, 
+    // handleSolve is now internal to Dashboard or passed as prop - we will override it here 
+    // if it was passed as a prop, we assume the parent allows us to handle the logic, 
+    // or we implement the logic here if "Dashboard" owns the solve trigger.
+    // Based on previous code, handleSolve was passed in. We will reimplement the logic 
+    // inside a local wrapper or assume we can rewrite the passed function's logic here.
+    // **Assumption**: We will implement 'onSolve' locally and call setSolution provided by parent.
+    // Actually, looking at props: { handleSolve, isSolving ... }
+    // We need to change how handleSolve works. Since we can't change the Parent in this snippet, 
+    // I will implement the logic inside this component and ignore the passed 'handleSolve' 
+    // or ideally replace it. 
+    // BETTER APPROACH: I will implement the streaming logic HERE.
     solution, setSolution, currentPaperId, 
     dashboardView, setDashboardView,
     studentResults, loadingResults, fetchStudentResults,
@@ -28,6 +39,10 @@ export default function Dashboard({
   const [isEditingSolution, setIsEditingSolution] = useState(false);
   const [editedSolution, setEditedSolution] = useState("");
   const [evalMode, setEvalMode] = useState(false);
+  
+  // New State for Progress
+  const [localIsSolving, setLocalIsSolving] = useState(false);
+  const [solvingProgress, setSolvingProgress] = useState({ current: 0, total: 0 });
 
   const startEditing = () => {
     setEditedSolution(solution);
@@ -37,6 +52,66 @@ export default function Dashboard({
   const saveEdit = async () => {
       await handleSaveEditedSolution(editedSolution);
       setIsEditingSolution(false);
+  };
+
+  // --- NEW STREAMING SOLVE FUNCTION ---
+  const handleStreamingSolve = async () => {
+      if (!files.length || !paperName) return;
+      
+      setLocalIsSolving(true);
+      setSolvingProgress({ current: 0, total: 0 });
+      setSolution(""); // Clear previous
+      
+      const formData = new FormData();
+      formData.append("name", paperName);
+      Array.from(files).forEach(f => formData.append("files", f));
+
+      try {
+          const response = await fetch('http://127.0.0.1:8000/solve', {
+              method: 'POST',
+              body: formData,
+          });
+
+          if (!response.ok) throw new Error("Failed to start solving");
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              
+              // Process all complete lines
+              buffer = lines.pop(); // Keep incomplete line in buffer
+
+              for (const line of lines) {
+                  if (!line.trim()) continue;
+                  try {
+                      const data = JSON.parse(line);
+                      
+                      if (data.status === "solving_page") {
+                          setSolvingProgress({ current: data.current, total: data.total });
+                      } else if (data.status === "completed") {
+                          setSolution(data.solution_text);
+                          // We might want to notify parent of the new ID if needed, 
+                          // but setSolution updates the UI.
+                      }
+                  } catch (e) {
+                      console.error("JSON Parse Error", e);
+                  }
+              }
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Error solving paper");
+      } finally {
+          setLocalIsSolving(false);
+          setSolvingProgress({ current: 0, total: 0 });
+      }
   };
 
   // --- ROBUST PRINT FUNCTION ---
@@ -182,9 +257,14 @@ export default function Dashboard({
                             <p className="text-xs text-gray-500">{files.length > 0 ? `${files.length} file(s) selected` : "Upload Images or PDF"}</p>
                         </div>
                     </div>
-                    <button onClick={handleSolve} disabled={isSolving || files.length === 0}
+                    <button onClick={handleStreamingSolve} disabled={localIsSolving || files.length === 0}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded font-medium text-sm flex justify-center items-center gap-2">
-                        {isSolving ? <Loader2 className="animate-spin" size={16} /> : "Generate Solution"}
+                        {localIsSolving ? (
+                            <>
+                                <Loader2 className="animate-spin" size={16} /> 
+                                {solvingProgress.total > 0 ? `Solving ${solvingProgress.current}/${solvingProgress.total}...` : "Preparing..."}
+                            </>
+                        ) : "Generate Solution"}
                     </button>
                 </div>
             </div>
@@ -219,7 +299,9 @@ export default function Dashboard({
                     <h4 className="font-bold text-lg text-gray-800 mb-4">Submit Student Work</h4>
                     <div className="grid grid-cols-2 gap-4 mb-4">
                         <input type="text" placeholder="Student Name" className="p-2 border rounded text-sm" value={studentName} onChange={(e) => setStudentName(e.target.value)} />
-                        <input type="file" accept="image/*" className="text-sm text-gray-500" onChange={(e) => setStudentFile(e.target.files[0])} />
+                        
+                        {/* CHANGED: ACCEPT PDF */}
+                        <input type="file" accept="image/*,application/pdf" className="text-sm text-gray-500" onChange={(e) => setStudentFile(e.target.files[0])} />
                     </div>
                     <button onClick={handleEvaluate} disabled={isEvaluating} className="bg-indigo-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2">
                         {isEvaluating && <Loader2 className="animate-spin" size={14}/>} {isEvaluating ? "Grading..." : "Submit & Grade"}
