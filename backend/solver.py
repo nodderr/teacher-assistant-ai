@@ -10,7 +10,7 @@ load_dotenv()
 
 Solver_Model="gemini-3-flash-preview"
 Evaluation_Model="gemini-2.5-flash-preview"
-Generator_Model="gemini-3-flash-preview"
+Generator_Model="gemini-2.5-flash"
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -63,120 +63,153 @@ Output Format (Markdown):
 **Total Score:** X / Y
 """
 
-# --- UPDATED GENERATOR PROMPT ---
-GENERATOR_SYSTEM_PROMPT = r"""
+# --- BOARD SPECIFIC PROMPTS ---
+
+# FIXED: Doubled curly braces {{ }} for LaTeX examples so .format() ignores them
+LATEX_RULES = r"""
+CRITICAL LATEX RULES:
+1. **SQUARE ROOTS:** NEVER enclose the entire equation inside `\sqrt{{}}`. 
+   - **WRONG:** `\sqrt{{x^2 + 5 = 9}}` (Root extends over equals sign)
+   - **CORRECT:** `\sqrt{{x^2 + 5}} = 9` (Root only over the term)
+2. **FRACTIONS:** Ensure fractions are closed properly. `\frac{{a}}{{b}}`.
+"""
+
+PROMPT_CBSE = r"""
 You are a CBSE Examination Paper Setter.
-Task: Create a highly realistic CBSE-style Question Paper based on user specifications.
+FORMATTING RULES (Markdown + HTML):
 
-### CRITICAL FORMATTING RULES (Markdown + HTML):
-To ensure the output renders correctly on the screen, you MUST follow these rules:
+1. **HEADER (Use Markdown headers inside center tags):**
+   <center>
+   <h1>Neeti Tution Classes</h1>
+   <h3>PRE-BOARD EXAMINATION (2025-2026)</h3>
+   <b>CLASS: {class_level}</b> | <b>SUBJECT: {subject}</b> | <b>BOARD: CBSE</b>
+   </center>
+   <br>
+   <div style="display: flex; justify-content: space-between;">
+   <b>Time Allowed: 3 Hours</b>
+   <b>Maximum Marks: 80</b>
+   </div>
+   <hr>
 
-1. **HEADER STRUCTURE**:
-   # Neeti Tution Classes
-   ### PRE-BOARD EXAMINATION (2025-2026)
-   **CLASS: {class_level}** | **SUBJECT: {subject}**
-   
-   **Time Allowed: 3 Hours** **Maximum Marks: 80**
-   
-   ***
-
-2. **GENERAL INSTRUCTIONS**:
+2. **GENERAL INSTRUCTIONS:**
    **General Instructions:**
    1. This Question Paper contains 38 questions.
    2. This Question Paper is divided into 5 Sections A, B, C, D and E.
-   3. **Section A:** Q. No. 1-18 are MCQs and Q. No. 19-20 are Assertion-Reason based questions of 1 mark each.
-   4. **Section B:** Q. No. 21-25 are Very Short Answer (VSA) type questions, carrying 2 marks each.
-   5. **Section C:** Q. No. 26-31 are Short Answer (SA) type questions, carrying 3 marks each.
-   6. **Section D:** Q. No. 32-35 are Long Answer (LA) type questions, carrying 5 marks each.
-   7. **Section E:** Q. No. 36-38 are Case Study based questions carrying 4 marks each.
-   8. All Questions are compulsory.
-   9. Draw neat figures wherever required. Take $\pi=22/7$ wherever required.
-   10. Use of calculators is not allowed.
+   3. **Section A:** MCQs (1 mark each).
+   4. **Section B:** VSA (2 marks each).
+   5. **Section C:** SA (3 marks each).
+   6. **Section D:** LA (5 marks each).
+   7. **Section E:** Case Study (4 marks each).
+   8. Use $\pi=22/7$ wherever required.
 
-3. **SECTION HEADERS (CENTERED & BIG)**:
-   - You **MUST** use HTML tags to center the section headers.
-   - Insert `<br><br><br>` before every section to create large vertical spacing.
-   - **EXACT FORMAT TO USE:**
-     
-     <br><br><br>
-     <center><h2>SECTION A</h2></center>
-     <center>*(Section A consists of 20 questions of 1 mark each)*</center>
-     <br>
+3. **SECTION HEADERS (Use HTML centering):**
+   <br><br><br>
+   <center><h2>SECTION A</h2></center>
+   <center>*(Section A consists of 20 questions of 1 mark each)*</center>
+   <br>
 
-4. **QUESTION NUMBERING & SPACING**:
-   - **CONTINUOUS NUMBERING:** Questions must be numbered continuously from 1 to 38 across all sections (do NOT restart at 1 for each section).
-   - **FORMAT:** Do NOT use Markdown list syntax (like "1. "). Instead, use **Bold Text** for the number (like "**1.**") to prevent auto-indentation issues with HTML tags.
-   - **MCQs:** Leave a blank line between the Question text and the Options.
-     
-     *Example MCQ:*
-     **1.** Given that $HCF(306, 657) = 9$, the LCM(306, 657) is:
-     
-     (A) 22338
-     
-     (B) 22330
-     
-     (C) 11228
-     
-     (D) 33228
+4. **QUESTION FORMATTING:** - **Numbering:** Use bold numbers like **1.**, **2.** (Continuous 1 to 38).
+   - **Spacing:** Leave TWO blank lines between questions.
+""" + LATEX_RULES
 
-   - **Normal Questions:** Leave **TWO** blank lines between questions.
+PROMPT_ICSE = r"""
+You are an ICSE Examination Paper Setter.
+FORMATTING RULES (Markdown + HTML):
 
-5. **CONTENT RULES**:
-   - Ensure questions are strictly from the provided chapters: {chapter_list}.
-   - Difficulty Level: {difficulty}/100.
-   - Use LaTeX for math equations (e.g., $x^2 + y^2 = r^2$).
-   - For **Assertion-Reason**, clearly label "Assertion (A):" and "Reason (R):" on separate lines.
-   - For **Case Study (Section E)**, provide a short paragraph/context before the sub-questions.
+1. **HEADER (Use Markdown headers inside center tags):**
+   <center>
+   <h1>Neeti Tution Classes</h1>
+   <h3>ICSE MOCK EXAMINATION (2025-2026)</h3>
+   <b>CLASS: {class_level}</b> | <b>SUBJECT: {subject}</b> | <b>BOARD: ICSE</b>
+   </center>
+   <br>
+   <div style="display: flex; justify-content: space-between;">
+   <b>Time Allowed: 2 Hours</b>
+   <b>Maximum Marks: 80</b>
+   </div>
+   <hr>
 
-6. **ADAPTABILITY**:
-   If the user selected "Chapterwise" or a specific difficulty, adjust the syllabus coverage accordingly but **KEEP the standard CBSE formatting** (Sections, Options, Spacing) intact.
-"""
+2. **GENERAL INSTRUCTIONS:**
+   **General Instructions:**
+   1. Answers to this Paper must be written on the paper provided separately.
+   2. You will not be allowed to write during the first 15 minutes.
+   3. This paper consists of two sections: Section A and Section B.
+   4. **Section A** (Compulsory) consists of short answer questions.
+   5. **Section B** consists of long answer questions. Answer any FOUR questions.
+
+3. **SECTION HEADERS (Use HTML centering):**
+   <br><br><br>
+   <center><h2>SECTION A (40 Marks)</h2></center>
+   <center>*(Attempt all questions from this Section)*</center>
+   <br>
+
+4. **QUESTION FORMATTING:**
+   - **Numbering:** Use **Q1.**, **Q2.** style headers. 
+   - **Sub-parts:** Use (i), (ii), (iii).
+""" + LATEX_RULES
+
+PROMPT_IB = r"""
+You are an IB DP (International Baccalaureate) Paper Setter.
+FORMATTING RULES (Markdown + HTML):
+
+1. **HEADER (Use Markdown headers inside center tags):**
+   <center>
+   <h1>Neeti Tution Classes</h1>
+   <h3>IB DIPLOMA PROGRAMME MOCK</h3>
+   <b>CLASS: {class_level}</b> | <b>SUBJECT: {subject}</b> | <b>LEVEL: HL/SL</b>
+   </center>
+   <br>
+   <div style="display: flex; justify-content: space-between;">
+   <b>Time Allowed: 2 Hours</b>
+   <b>Maximum Marks: 80</b>
+   </div>
+   <hr>
+
+2. **GENERAL INSTRUCTIONS:**
+   **Instructions to Candidates:**
+   1. Do not open this examination paper until instructed to do so.
+   2. Answer all questions.
+   3. Unless otherwise stated in the question, all numerical answers should be given exactly or to three significant figures.
+
+3. **SECTION HEADERS:**
+   <br><br><br>
+   <center><h2>SECTION A</h2></center>
+   <br>
+
+4. **QUESTION FORMATTING:**
+   - Number questions 1, 2, 3... 
+   - Marks should be indicated in brackets at the end of the line, e.g. **[4 marks]**.
+""" + LATEX_RULES
 
 def get_latex_solution(image_inputs):
-    """
-    Solves the paper PAGE BY PAGE to avoid cutting off the output.
-    """
+    """Solves the paper PAGE BY PAGE."""
     full_solution_text = ""
-    
     model = genai.GenerativeModel(
         model_name=Evaluation_Model, 
         system_instruction=SOLVER_SYSTEM_PROMPT,
         generation_config=generation_config,
         safety_settings=safety_settings
     )
-
     print(f"Processing {len(image_inputs)} pages...")
-
     for i, item in enumerate(image_inputs):
         try:
-            # Prepare the single image for this iteration
             img = None
             if isinstance(item, io.BytesIO):
                 item.seek(0)
                 img = Image.open(item)
             else:
                 img = item 
-
             print(f"Solving Page {i+1}...")
-            
-            # Request solution for JUST this page
             response = model.generate_content([
                 f"Solve all questions present on Page {i+1} of this exam paper.", 
                 img
             ])
-            
             page_content = response.text if response.text else "*[No text generated for this page]*"
-            
-            full_solution_text += f"\n\n## --- Page {i+1} Solution ---\n\n"
-            full_solution_text += page_content
-            
+            full_solution_text += f"\n\n## --- Page {i+1} Solution ---\n\n{page_content}"
             time.sleep(1)
-
         except Exception as e:
             print(f"Error on Page {i+1}: {e}")
-            full_solution_text += f"\n\n## --- Page {i+1} Error ---\n"
-            full_solution_text += f"Could not solve this page. Error: {str(e)}\n"
-
+            full_solution_text += f"\n\n## --- Page {i+1} Error ---\nCould not solve this page. Error: {str(e)}\n"
     return full_solution_text
 
 def evaluate_student_solution(student_image_file, reference_solution_text):
@@ -190,7 +223,6 @@ def evaluate_student_solution(student_image_file, reference_solution_text):
         generation_config=generation_config,
         safety_settings=safety_settings
     )
-
     try:
         response = model.generate_content([
             f"Reference Solution:\n{reference_solution_text}\n\nEvaluate the student submission.", 
@@ -202,41 +234,42 @@ def evaluate_student_solution(student_image_file, reference_solution_text):
         return "Error: Could not generate evaluation report."
 
 def extract_score(text):
-    """Robust extraction of score X/Y"""
     match = re.search(r"(?:Total\s*)?Score\s*[:\-]?\s*(\d+\s*[\/\\]\s*\d+)", text, re.IGNORECASE)
     if match: return match.group(1).replace(" ", "")
-    
     match = re.search(r"Marks\s*[:\-]?\s*(\d+\s*[\/\\]\s*\d+)", text, re.IGNORECASE)
     if match: return match.group(1).replace(" ", "")
-
     matches = re.findall(r"\b(\d+\s*\/\s*\d+)\b", text)
     if matches: return matches[-1].replace(" ", "")
-
     return "N/A"
 
-def generate_cbse_paper(class_level, subject, chapters, difficulty):
-    """Generates a text-based question paper."""
+def generate_paper(class_level, subject, chapters, difficulty, board):
+    """Generates a text-based question paper with Board-Specific Formatting."""
     
     chapter_list_str = ", ".join(chapters) if chapters else "Full Syllabus"
     
-    prompt = f"""
-    Create a {class_level} Question Paper for the subject: {subject}.
+    # Select the correct prompt based on the board
+    if board == "ICSE":
+        base_prompt = PROMPT_ICSE
+    elif board == "IB":
+        base_prompt = PROMPT_IB
+    else:
+        base_prompt = PROMPT_CBSE  # Default to CBSE
     
-    Included Chapters: {chapter_list_str}
-    
-    Difficulty Level: {difficulty} (where 0 is very easy, 100 is Olympiad level).
-    
-    Please ensure the distribution of marks totals 80 if possible, or scale it down for a chapter test.
-    STRICTLY follow the Sections A, B, C, D, E format defined in the system instruction.
-    """
-    
-    # Format the system prompt with variables
-    sys_prompt = GENERATOR_SYSTEM_PROMPT.format(
+    # Format the system prompt
+    # Now safe to format because LaTeX braces are escaped as {{ }}
+    sys_prompt = base_prompt.format(
         class_level=class_level, 
-        subject=subject, 
-        difficulty=difficulty,
-        chapter_list=chapter_list_str
+        subject=subject
     )
+    
+    user_prompt = f"""
+    Create a {board} Question Paper for {subject}.
+    Included Chapters: {chapter_list_str}
+    Difficulty Level: {difficulty}/100.
+    
+    STRICTLY follow the {board} formatting rules defined in the system instructions.
+    Ensure questions are relevant to the selected chapters.
+    """
     
     model = genai.GenerativeModel(
         model_name=Generator_Model,
@@ -246,7 +279,7 @@ def generate_cbse_paper(class_level, subject, chapters, difficulty):
     )
     
     try:
-        response = model.generate_content(prompt)
+        response = model.generate_content(user_prompt)
         return response.text
     except Exception as e:
         print(f"Generation Error: {e}")

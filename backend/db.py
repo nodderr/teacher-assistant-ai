@@ -50,13 +50,14 @@ def get_records():
     response = supabase.table('solutions').select("*").order("created_at", desc=True).execute()
     return response.data
 
-# --- GENERATED PAPERS (NEW FEATURE) ---
-def save_generated_paper(name, class_level, subject, file_url):
-    """Saves a record to the generated_papers table"""
+# --- GENERATED PAPERS (UPDATED) ---
+def save_generated_paper(name, class_level, subject, board, file_url):
+    """Saves a record to the generated_papers table including the board"""
     response = supabase.table('generated_papers').insert({
         "name": name,
         "class_level": class_level,
         "subject": subject,
+        "board": board,
         "file_url": file_url,
         "created_at": datetime.now().isoformat()
     }).execute()

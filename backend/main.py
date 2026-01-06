@@ -7,14 +7,14 @@ from datetime import datetime
 import pypdfium2 as pdfium 
 from solver import (
     get_latex_solution, evaluate_student_solution, extract_score, 
-    generate_cbse_paper
+    generate_paper # Renamed from generate_cbse_paper
 )
 from db import (
     upload_bytes_to_supabase, save_record, get_records, 
     save_student_submission, get_student_submissions,
     delete_paper_record, delete_student_record,
     update_paper_solution, update_student_submission,
-    save_generated_paper, get_generated_papers, delete_generated_paper # New imports
+    save_generated_paper, get_generated_papers, delete_generated_paper
 )
 from pydantic import BaseModel
 
@@ -33,9 +33,10 @@ class GradeUpdate(BaseModel):
     report: str
 
 class GenerateRequest(BaseModel):
-    name: str  # Added Name
+    name: str 
     class_level: str
     subject: str
+    board: str # Added Board
     paper_type: str 
     chapters: List[str]
     difficulty: int
@@ -94,11 +95,11 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
 
 @app.post("/generate-paper")
 async def generate_paper_route(req: GenerateRequest):
-    print(f"Generating {req.subject} paper: {req.name}")
+    print(f"Generating {req.board} {req.subject} paper: {req.name}")
     
     try:
-        paper_text = generate_cbse_paper(
-            req.class_level, req.subject, req.chapters, req.difficulty
+        paper_text = generate_paper(
+            req.class_level, req.subject, req.chapters, req.difficulty, req.board
         )
         
         # Save file to storage
@@ -110,8 +111,8 @@ async def generate_paper_route(req: GenerateRequest):
             "text/markdown"
         )
         
-        # Save to NEW table
-        paper_id = save_generated_paper(req.name, req.class_level, req.subject, file_url)
+        # Save to DB with board info
+        paper_id = save_generated_paper(req.name, req.class_level, req.subject, req.board, file_url)
         
         return {
             "status": "success",
