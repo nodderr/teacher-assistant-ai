@@ -1,8 +1,8 @@
 fastapi
 python-multipart
 uvicorn
-openai
 python-dotenv
 httpx
 pypdfium2
 pillow
+google-generativeai

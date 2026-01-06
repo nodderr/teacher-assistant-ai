@@ -1,21 +1,42 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import io
-from typing import List
-import pypdfium2 as pdfium  # <--- NEW IMPORT
-from solver import get_latex_solution, evaluate_student_solution, extract_score
+from typing import List, Optional
+import pypdfium2 as pdfium 
+from solver import (
+    get_latex_solution, evaluate_student_solution, extract_score, 
+    generate_cbse_paper # Imported new function
+)
 from db import (
     upload_bytes_to_supabase, save_record, get_records, 
     save_student_submission, get_student_submissions,
-    delete_paper_record, delete_student_record 
+    delete_paper_record, delete_student_record,
+    update_paper_solution, update_student_submission,
+    save_generated_paper_record # Imported new function
 )
+from pydantic import BaseModel
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
+
+# --- Pydantic Models ---
+class SolutionUpdate(BaseModel):
+    text: str
+
+class GradeUpdate(BaseModel):
+    score: str
+    report: str
+
+class GenerateRequest(BaseModel):
+    class_level: str
+    subject: str
+    paper_type: str # 'complete' or 'chapterwise'
+    chapters: List[str]
+    difficulty: int
 
 @app.post("/solve")
 async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)):
@@ -35,25 +56,16 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
             )
             if i == 0: original_url = url
 
-            # --- CHANGED SECTION START ---
             if file.content_type == "application/pdf":
                 try:
-                    # Load the PDF from bytes
                     pdf = pdfium.PdfDocument(file_bytes)
-                    
-                    # Loop through pages and render them to images
                     for page in pdf:
-                        # scale=2 gives higher resolution (good for handwriting)
                         bitmap = page.render(scale=2) 
                         pil_image = bitmap.to_pil()
                         processed_images.append(pil_image)
-                        
                 except Exception as e:
                     print(f"Error converting PDF {file.filename}: {e}")
-            # --- CHANGED SECTION END ---
-            
             else:
-                # It's already an image
                 processed_images.append(io.BytesIO(file_bytes))
                 
         except Exception as e:
@@ -81,7 +93,41 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
         "solution_text": solution_text 
     }
 
-# ... (The rest of the file: /history, /evaluate, etc. stays EXACTLY the same)
+@app.post("/generate-paper")
+async def generate_paper_route(req: GenerateRequest):
+    print(f"Generating {req.subject} paper for {req.class_level}")
+    
+    try:
+        # Generate content
+        paper_text = generate_cbse_paper(
+            req.class_level, req.subject, req.chapters, req.difficulty
+        )
+        
+        # Save to DB
+        paper_name = f"{req.subject} {req.paper_type.capitalize()} Paper ({req.class_level})"
+        paper_id, file_url = save_generated_paper_record(paper_name, paper_text)
+        
+        return {
+            "status": "success",
+            "paper_id": paper_id,
+            "text": paper_text,
+            "url": file_url
+        }
+    except Exception as e:
+        print(f"Generation Route Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/paper/{paper_id}/solution")
+async def update_solution_route(paper_id: str, update: SolutionUpdate):
+    try:
+        success = update_paper_solution(paper_id, update.text)
+        if not success:
+             raise HTTPException(status_code=404, detail="Paper not found")
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Update Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update solution")
+
 @app.get("/history")
 async def get_history_route():
     return get_records()
@@ -130,6 +176,15 @@ async def evaluate_paper(
         "score": score,
         "evaluation_report": report_text
     }
+
+@app.put("/student/{student_id}")
+async def update_student_grade_route(student_id: str, update: GradeUpdate):
+    try:
+        update_student_submission(student_id, update.score, update.report)
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Grade Update Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update grade")
 
 @app.get("/paper/{paper_id}/students")
 async def get_paper_students(paper_id: str):
