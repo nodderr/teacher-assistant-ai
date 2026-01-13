@@ -74,6 +74,21 @@ CRITICAL LATEX RULES:
 4. **FRACTIONS:** Use $\frac{{a}}{{b}}$.
 """
 
+MCQ_FORMATTING = r"""
+5. **MCQ OPTION FORMATTING (CRITICAL for Section A):**
+   - For Multiple Choice Questions, you MUST format the options as a Markdown list wrapped in a specific HTML div.
+   - Use this EXACT format (include blank lines):
+     <div class="mcq-grid">
+
+     - (a) Option 1
+     - (b) Option 2
+     - (c) Option 3
+     - (d) Option 4
+
+     </div>
+   - This ensures the math renders correctly while allowing for a grid layout.
+"""
+
 PROMPT_CBSE = r"""
 You are a CBSE Examination Paper Setter.
 FORMATTING RULES (Markdown + HTML):
@@ -106,7 +121,7 @@ FORMATTING RULES (Markdown + HTML):
    <br>
 4. **QUESTION FORMATTING:** - **Numbering:** Use bold numbers like **1.**, **2.** (Continuous 1 to 38).
    - **Spacing:** Leave TWO blank lines between questions.
-""" + LATEX_RULES
+""" + LATEX_RULES + MCQ_FORMATTING
 
 PROMPT_ICSE = r"""
 You are an ICSE Examination Paper Setter.
@@ -138,7 +153,7 @@ FORMATTING RULES (Markdown + HTML):
 4. **QUESTION FORMATTING:**
    - **Numbering:** Use **Q1.**, **Q2.** style headers. 
    - **Sub-parts:** Use (i), (ii), (iii).
-""" + LATEX_RULES
+""" + LATEX_RULES + MCQ_FORMATTING
 
 PROMPT_IB = r"""
 You are an IB DP (International Baccalaureate) Paper Setter.
@@ -165,11 +180,10 @@ FORMATTING RULES (Markdown + HTML):
    <center><h2>SECTION A</h2></center>
    <br>
 4. **QUESTION FORMATTING:**
-   - Number questions 1, 2, 3... 
    - Marks should be indicated in brackets at the end of the line, e.g. **[4 marks]**.
-""" + LATEX_RULES
+""" + LATEX_RULES + MCQ_FORMATTING
 
-def get_latex_solution_stream(image_inputs):
+async def get_latex_solution_stream(image_inputs):
     """
     Solves the paper PAGE BY PAGE and YIELDS progress.
     Yields: (current_page_index, total_pages, accumulated_text)
@@ -198,7 +212,7 @@ def get_latex_solution_stream(image_inputs):
             # Yield progress before starting the heavy generation
             # We yield the previous text + a marker or just the state
             
-            response = model.generate_content([
+            response = await model.generate_content_async([
                 f"Solve all questions present on Page {i+1} of this exam paper.", 
                 img
             ])
@@ -209,7 +223,7 @@ def get_latex_solution_stream(image_inputs):
             # Yield progress update
             yield (i + 1, total_pages, full_solution_text)
             
-            time.sleep(1) # Avoid rate limits
+            # time.sleep(1) # No longer needed with async, or use asyncio.sleep if rate limiting
         except Exception as e:
             print(f"Error on Page {i+1}: {e}")
             full_solution_text += f"\n\n## --- Page {i+1} Error ---\nCould not solve this page. Error: {str(e)}\n"
@@ -217,7 +231,7 @@ def get_latex_solution_stream(image_inputs):
 
     # Return is not possible in generator, the last yield contains the full text
 
-def evaluate_student_solution(student_images, reference_solution_text):
+async def evaluate_student_solution(student_images, reference_solution_text):
     """
     Evaluates student submission which can be multiple images.
     """
@@ -233,7 +247,7 @@ def evaluate_student_solution(student_images, reference_solution_text):
     content.extend(student_images)
     
     try:
-        response = model.generate_content(content)
+        response = await model.generate_content_async(content)
         return response.text
     except Exception as e:
         print(f"Evaluation Error: {e}")
@@ -248,7 +262,7 @@ def extract_score(text):
     if matches: return matches[-1].replace(" ", "")
     return "N/A"
 
-def generate_paper(class_level, subject, chapters, difficulty, board):
+async def generate_paper(class_level, subject, chapters, difficulty, board):
     """Generates a text-based question paper with Board-Specific Formatting."""
     
     chapter_list_str = ", ".join(chapters) if chapters else "Full Syllabus"
@@ -283,7 +297,7 @@ def generate_paper(class_level, subject, chapters, difficulty, board):
     )
     
     try:
-        response = model.generate_content(user_prompt)
+        response = await model.generate_content_async(user_prompt)
         return response.text
     except Exception as e:
         print(f"Generation Error: {e}")

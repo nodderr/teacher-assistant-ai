@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import uuid
@@ -55,7 +56,8 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
     try:
         for i, file in enumerate(files):
             file_bytes = await file.read()
-            url = upload_bytes_to_supabase(
+            url = await run_in_threadpool(
+                upload_bytes_to_supabase,
                 file_bytes, "papers", f"originals/{job_id}_{i}_{file.filename}", file.content_type
             )
             if i == 0: original_url = url
@@ -82,7 +84,7 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
         solution_text = ""
         
         # Stream updates from the solver
-        for current_page, total_pages, current_text in get_latex_solution_stream(processed_images):
+        async for current_page, total_pages, current_text in get_latex_solution_stream(processed_images):
             solution_text = current_text
             # Yield progress JSON
             yield json.dumps({
@@ -94,13 +96,14 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
         # Finalize
         solution_url = ""
         try:
-            solution_url = upload_bytes_to_supabase(
+            solution_url = await run_in_threadpool(
+                upload_bytes_to_supabase,
                 solution_text.encode('utf-8'), "papers", f"solutions/{job_id}.md", "text/markdown"
             )
         except Exception:
             pass
 
-        paper_id = save_record(name, original_url, solution_url)
+        paper_id = await run_in_threadpool(save_record, name, original_url, solution_url)
 
         # Yield final result
         yield json.dumps({
@@ -119,13 +122,14 @@ async def generate_paper_route(req: GenerateRequest):
     print(f"Generating {req.board} {req.subject} paper: {req.name}")
     
     try:
-        paper_text = generate_paper(
+        paper_text = await generate_paper(
             req.class_level, req.subject, req.chapters, req.difficulty, req.board
         )
         
         # Save file to storage
         filename = f"generated/{datetime.now().strftime('%Y%m%d%H%M%S')}_{req.name.replace(' ', '_')}.md"
-        file_url = upload_bytes_to_supabase(
+        file_url = await run_in_threadpool(
+            upload_bytes_to_supabase,
             paper_text.encode('utf-8'), 
             "papers", 
             filename, 
@@ -133,7 +137,7 @@ async def generate_paper_route(req: GenerateRequest):
         )
         
         # Save to DB with board info
-        paper_id = save_generated_paper(req.name, req.class_level, req.subject, req.board, file_url)
+        paper_id = await run_in_threadpool(save_generated_paper, req.name, req.class_level, req.subject, req.board, file_url)
         
         return {
             "status": "success",
@@ -147,12 +151,12 @@ async def generate_paper_route(req: GenerateRequest):
 
 @app.get("/generated-papers")
 async def get_generated_papers_route():
-    return get_generated_papers()
+    return await run_in_threadpool(get_generated_papers)
 
 @app.delete("/generated-papers/{paper_id}")
 async def delete_generated_paper_route(paper_id: str):
     try:
-        delete_generated_paper(paper_id)
+        await run_in_threadpool(delete_generated_paper, paper_id)
         return {"status": "success"}
     except Exception as e:
         print(f"Delete Error: {e}")
@@ -161,7 +165,7 @@ async def delete_generated_paper_route(paper_id: str):
 @app.put("/paper/{paper_id}/solution")
 async def update_solution_route(paper_id: str, update: SolutionUpdate):
     try:
-        success = update_paper_solution(paper_id, update.text)
+        success = await run_in_threadpool(update_paper_solution, paper_id, update.text)
         if not success:
              raise HTTPException(status_code=404, detail="Paper not found")
         return {"status": "success"}
@@ -171,12 +175,12 @@ async def update_solution_route(paper_id: str, update: SolutionUpdate):
 
 @app.get("/history")
 async def get_history_route():
-    return get_records()
+    return await run_in_threadpool(get_records)
 
 @app.delete("/history/{paper_id}")
 async def delete_paper_route(paper_id: str):
     try:
-        delete_paper_record(paper_id)
+        await run_in_threadpool(delete_paper_record, paper_id)
         return {"status": "success"}
     except Exception as e:
         print(f"Delete Error: {e}")
@@ -212,24 +216,26 @@ async def evaluate_paper(
         processed_images.append(io.BytesIO(file_bytes))
 
     try:
-        submission_url = upload_bytes_to_supabase(
+        submission_url = await run_in_threadpool(
+            upload_bytes_to_supabase,
             file_bytes, "papers", f"students/{job_id}_{student_file.filename}", student_file.content_type
         )
     except Exception:
         submission_url = ""
 
     # Pass list of images to solver
-    report_text = evaluate_student_solution(processed_images, reference_solution)
+    report_text = await evaluate_student_solution(processed_images, reference_solution)
     score = extract_score(report_text)
 
     try:
-        report_url = upload_bytes_to_supabase(
+        report_url = await run_in_threadpool(
+            upload_bytes_to_supabase,
             report_text.encode('utf-8'), "papers", f"evaluations/{job_id}.md", "text/markdown"
         )
     except Exception:
         report_url = ""
 
-    save_student_submission(paper_id, student_name, score, submission_url, report_url)
+    await run_in_threadpool(save_student_submission, paper_id, student_name, score, submission_url, report_url)
     
     return {
         "student_name": student_name,
@@ -240,7 +246,7 @@ async def evaluate_paper(
 @app.put("/student/{student_id}")
 async def update_student_grade_route(student_id: str, update: GradeUpdate):
     try:
-        update_student_submission(student_id, update.score, update.report)
+        await run_in_threadpool(update_student_submission, student_id, update.score, update.report)
         return {"status": "success"}
     except Exception as e:
         print(f"Grade Update Error: {e}")
@@ -248,12 +254,12 @@ async def update_student_grade_route(student_id: str, update: GradeUpdate):
 
 @app.get("/paper/{paper_id}/students")
 async def get_paper_students(paper_id: str):
-    return get_student_submissions(paper_id)
+    return await run_in_threadpool(get_student_submissions, paper_id)
 
 @app.delete("/student/{student_id}")
 async def delete_student_route(student_id: str):
     try:
-        delete_student_record(student_id)
+        await run_in_threadpool(delete_student_record, student_id)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to delete student submission")

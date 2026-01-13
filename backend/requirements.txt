@@ -6,3 +6,4 @@ httpx
 pypdfium2
 pillow
 google-generativeai
+supabase
