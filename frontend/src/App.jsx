@@ -11,6 +11,7 @@ import GeneratedPapersList from './components/GeneratedPapersList';
 import HistoryList from './components/HistoryList';
 import Dashboard from './components/Dashboard';
 import VerificationModal from './components/VerificationModal';
+import Settings from './components/Settings';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -20,6 +21,19 @@ function App() {
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0); 
   const [isBusy, setIsBusy] = useState(false); // Generic busy flag
+
+  // -- SETTINGS STATE --
+  const [userProfile, setUserProfile] = useState({ name: "Neeti Verma", role: "Senior Faculty" });
+  const [theme, setTheme] = useState('light'); // 'light', 'dark', 'system'
+
+  useEffect(() => {
+    // Basic theme application logic
+    if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   // -- DASHBOARD STATE (Hoisted) --
   const [currentPaperId, setCurrentPaperId] = useState(null); 
@@ -89,6 +103,7 @@ function App() {
   };
 
   useEffect(() => {
+    toast.info(`Connecting to: ${API_URL}`);
     if (activeTab === 'history') fetchHistory();
     if (activeTab === 'my_papers') fetchGeneratedPapers();
   }, [activeTab]);
@@ -213,11 +228,44 @@ function App() {
           setter(prev => prev.filter(i => i.id !== id));
           toast.success("Item deleted.");
       } catch(e) { toast.error("Delete failed."); }
+
+  };
+
+  const handleClearHistory = () => {
+    if(confirm("Are you sure you want to clear all history? This cannot be undone.")) {
+      setHistoryItems([]);
+      toast.success("History cleared.");
+      // In real app, call DELETE endpoint
+    }
+  };
+
+  const handleClearGenerated = () => {
+    if(confirm("Are you sure you want to clear all generated papers? This cannot be undone.")) {
+      setGeneratedPapers([]);
+      toast.success("Generated papers cleared.");
+      // In real app, call DELETE endpoint
+    }
+  };
+
+  const handleExportData = () => {
+    const data = {
+      history: historyItems,
+      generated: generatedPapers,
+      studentResults: studentResults,
+      userProfile
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `teacher-assistant-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    toast.success("Backup downloaded.");
   };
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans text-gray-900">
-      <Toaster richColors position="top-center" />
+      <Toaster richColors position="bottom-right" />
       
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && window.innerWidth < 1024 && (
@@ -232,6 +280,7 @@ function App() {
         }} 
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        userProfile={userProfile}
       />
 
       <main className={`flex-1 p-4 lg:p-8 overflow-y-auto h-screen relative transition-all duration-300 ${isSidebarOpen ? 'lg:ml-72' : 'ml-0'}`}>
@@ -251,7 +300,7 @@ function App() {
           
           <div className="flex-1">
             <h2 className="text-xl lg:text-2xl font-bold text-gray-800">
-              {activeTab === 'dashboard' ? 'Workspace' : activeTab === 'create' ? 'Paper Generator' : activeTab === 'my_papers' ? 'My Generated Papers' : 'Paper Archive'}
+              {activeTab === 'dashboard' ? 'Workspace' : activeTab === 'create' ? 'Paper Generator' : activeTab === 'my_papers' ? 'My Generated Papers' : activeTab === 'history' ? 'Paper Archive' : 'Settings'}
             </h2>
             <p className="text-gray-500 text-xs lg:text-sm">Manage your question papers and evaluations</p>
           </div>
@@ -290,6 +339,18 @@ function App() {
                 openVerification={setVerifyingStudent}
                 handleSaveEditedSolution={handleSaveEditedSolution}
             />
+        )}
+
+        {activeTab === 'settings' && (
+          <Settings 
+            userProfile={userProfile}
+            setUserProfile={setUserProfile}
+            theme={theme}
+            setTheme={setTheme}
+            onClearHistory={handleClearHistory}
+            onClearGenerated={handleClearGenerated}
+            onExportData={handleExportData}
+          />
         )}
 
         {verifyingStudent && (

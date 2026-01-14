@@ -119,7 +119,8 @@ export default function CreatePaper({ onSuccess, setError, setIsGenerating }) {
           // Cleanup
           setGenChapters([]); setGenType(""); setGenName(""); setStep(0);
       } catch (err) {
-          setError("Failed to generate paper.");
+          setError(`Failed: ${err.message} ${err.response?.statusText || ''}`);
+          toast.error(`Error: ${err.response?.data?.detail || err.message}`);
       } finally {
           setLoading(false); setIsGenerating(false);
       }

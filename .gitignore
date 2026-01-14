@@ -10,5 +10,6 @@ backend/.env
 #Frontend
 frontend/node_modules/
 frontend/dist/
-frontend/.env
+frontend/out/
+
 frontend/.env.local

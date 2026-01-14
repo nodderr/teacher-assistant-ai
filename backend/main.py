@@ -20,6 +20,19 @@ from db import (
     save_generated_paper, get_generated_papers, delete_generated_paper
 )
 from pydantic import BaseModel
+import re
+
+def sanitize_filename(filename: str) -> str:
+    # 1. Remove path details
+    filename = os.path.basename(filename)
+    # 2. Transliterate or remove non-ascii (simple approach: keep only safe chars)
+    # Keep alphanumeric, dots, dashes, underscores
+    cleaned = re.sub(r'[^a-zA-Z0-9._-]', '_', filename)
+    # 3. Truncate to reasonable length (e.g. 64 chars) to avoid filesystem/cloud limits
+    if len(cleaned) > 64:
+        name, ext = os.path.splitext(cleaned)
+        cleaned = name[:64-len(ext)] + ext
+    return cleaned
 
 app = FastAPI()
 
@@ -58,7 +71,7 @@ async def solve_paper(files: List[UploadFile] = File(...), name: str = Form(...)
             file_bytes = await file.read()
             url = await run_in_threadpool(
                 upload_bytes_to_supabase,
-                file_bytes, "papers", f"originals/{job_id}_{i}_{file.filename}", file.content_type
+                file_bytes, "papers", f"originals/{job_id}_{i}_{sanitize_filename(file.filename)}", file.content_type
             )
             if i == 0: original_url = url
 
@@ -218,7 +231,7 @@ async def evaluate_paper(
     try:
         submission_url = await run_in_threadpool(
             upload_bytes_to_supabase,
-            file_bytes, "papers", f"students/{job_id}_{student_file.filename}", student_file.content_type
+            file_bytes, "papers", f"students/{job_id}_{sanitize_filename(student_file.filename)}", student_file.content_type
         )
     except Exception:
         submission_url = ""

@@ -1,7 +1,7 @@
 import { LayoutDashboard, PlusCircle, FileOutput, History, GraduationCap, Settings, LogOut, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
+export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose, userProfile }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'create', label: 'Create Paper', icon: PlusCircle },
@@ -58,12 +58,17 @@ export default function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
                 NV
             </div>
             <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">Neeti Verma</p>
-                <p className="text-xs text-gray-400 truncate">Senior Faculty</p>
+                <p className="text-sm font-medium text-white truncate">{userProfile?.name || 'Neeti Verma'}</p>
+                <p className="text-xs text-gray-400 truncate">{userProfile?.role || 'Senior Faculty'}</p>
             </div>
           </div>
           <div className="mt-2 flex gap-1">
-             <button className="flex-1 p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-lg transition-colors flex justify-center"><Settings size={18}/></button>
+             <button 
+                onClick={() => setActiveTab('settings')}
+                className={`flex-1 p-2 rounded-lg transition-colors flex justify-center ${activeTab === 'settings' ? 'bg-primary-600 text-white' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+             >
+                <Settings size={18}/>
+             </button>
              <button className="flex-1 p-2 text-gray-500 hover:text-red-400 hover:bg-gray-800 rounded-lg transition-colors flex justify-center"><LogOut size={18}/></button>
           </div>
       </div>
