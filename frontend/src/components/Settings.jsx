@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Moon, Sun, Monitor, Trash2, Download, Bell, Save } from 'lucide-react';
 
 export default function Settings({ 
@@ -14,6 +14,11 @@ export default function Settings({
   // Local state for profile form to allow "Save" action
   const [localName, setLocalName] = useState(userProfile.name);
   const [localRole, setLocalRole] = useState(userProfile.role);
+
+  useEffect(() => {
+    setLocalName(userProfile.name);
+    setLocalRole(userProfile.role);
+  }, [userProfile]);
 
   const handleSaveProfile = () => {
     setUserProfile({ name: localName, role: localRole });
