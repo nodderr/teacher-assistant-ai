@@ -1,14 +1,13 @@
 # TeacherAssistant AI
 
-TeacherAssistant is an advanced AI-powered application designed to streamline the workflow of educators. It leverages multimodal LLMs (Google Gemini) to automatically solve question papers, generate new exams based on board standards (CBSE/ICSE/IB), and evaluate student handwritten submissions with detailed feedback.
+TeacherAssistant is an AI-powered application designed to streamline the workflow of educators. It leverages multimodal LLMs (Google Gemini) to automatically solve question papers, generate new exams based on board standards (CBSE/ICSE/IB), and evaluate student handwritten submissions with detailed feedback.
 
 ## 🌟 Capabilities
 
-### 1. 📝 Paper Solver
+### 1. Paper Solver
 - **Instant Solutions**: Upload PDF question papers or images.
 - **Multimodal AI**: The app reads the questions directly from the images.
-- **Real-Time Streaming**: Solutions are generated and streamed in real-time.
-- **Export**: Solutions are saved as Markdown for easy distribution.
+- **Export**: Solutions are saved as Markdown for easy distribution and accurate Math Rendering.
 
 ### 2. 📄 Exam Paper Generator
 - **Custom Papers**: Generate simplified or complex papers based on:
